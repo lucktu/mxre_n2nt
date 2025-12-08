@@ -271,7 +271,6 @@ static ssize_t transop_decode_twofish( n2n_trans_op_t * arg,
 static int transop_addspec_twofish( n2n_trans_op_t * arg, const n2n_cipherspec_t * cspec )
 {
     int retval = 1;
-    ssize_t pstat=-1;
     transop_tf_t * priv = (transop_tf_t *)arg->priv;
     uint8_t keybuf[N2N_MAX_KEYSIZE];
 
@@ -295,20 +294,38 @@ static int transop_addspec_twofish( n2n_trans_op_t * arg, const n2n_cipherspec_t
             sa->spec = *cspec;
             sa->sa_id = strtoul(tmp, NULL, 10);
 
-						size_t key_len = s;
-						if (key_len > N2N_MAX_KEYSIZE) {
-								key_len = N2N_MAX_KEYSIZE;
-						}
+            size_t key_len = s;
+            if (key_len > N2N_MAX_KEYSIZE) {
+                key_len = N2N_MAX_KEYSIZE;
+            }
 
-						if ( key_len > 0 )
-						{
-                sa->enc_tf = TwoFishInit( keybuf, pstat);
-                sa->dec_tf = TwoFishInit( keybuf, pstat);
+            memset(keybuf, 0, sizeof(keybuf));
+            memcpy(keybuf, sep+1, key_len);
+
+            if ( key_len > 0 )
+            {
+                sa->enc_tf = TwoFishInit( keybuf, key_len);
+                sa->dec_tf = TwoFishInit( keybuf, key_len);
+
+                if ( (sa->enc_tf) && (sa->dec_tf) )
+                {
+                    random_init(&sa->random);
+                    ++(priv->num_sa);
+                    retval = 0;
+                }
+                else
+                {
+                     if (sa->enc_tf) {
+                        TwoFishDestroy(sa->enc_tf);
+                        sa->enc_tf = NULL;
+                    }
+                    if (sa->dec_tf) {
+                        TwoFishDestroy(sa->dec_tf);
+                        sa->dec_tf = NULL;
+                    }
+                }
 
                 traceEvent( TRACE_DEBUG, "transop_addspec_twofish sa_id=%u data=%s.\n", sa->sa_id, sep+1);
-
-                ++(priv->num_sa);
-                retval = 0;
             }
         }
         else
@@ -323,7 +340,6 @@ static int transop_addspec_twofish( n2n_trans_op_t * arg, const n2n_cipherspec_t
 
     return retval;
 }
-
 
 static n2n_tostat_t transop_tick_twofish( n2n_trans_op_t * arg, time_t now )
 {

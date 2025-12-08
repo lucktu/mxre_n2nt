@@ -378,7 +378,15 @@ static int edge_init(n2n_edge_t * eee)
 /** Called in main() after options are parsed. */
 static int edge_init_twofish( n2n_edge_t * eee, uint8_t *encrypt_pwd, uint64_t encrypt_pwd_len )
 {
-    return transop_twofish_setup( &(eee->transop[N2N_TRANSOP_TF_IDX]), 0, encrypt_pwd, encrypt_pwd_len );
+    int retval;
+
+    retval = transop_twofish_setup( &(eee->transop[N2N_TRANSOP_TF_IDX]), 0, encrypt_pwd, encrypt_pwd_len );
+
+    if (retval == 0) {
+        eee->tx_transop_idx = N2N_TRANSOP_TF_IDX;
+    }
+
+    return retval;
 }
 
 static int edge_init_aes( n2n_edge_t * eee, uint8_t *encrypt_pwd, uint64_t encrypt_pwd_len )
@@ -2343,7 +2351,7 @@ int main(int argc, char* argv[])
     int     mtu = DEFAULT_MTU;
     int     got_s = 0;
     struct tuntap_config tuntap_config;
-		int encrypt_mode = 1;
+		int encrypt_mode = 2;
 
 #ifndef _WIN32
     uid_t   userid = 0; /* root is the only guaranteed ID */
@@ -2794,12 +2802,14 @@ int main(int argc, char* argv[])
       }
   } else if (encrypt_mode == 2) {
       if (!encrypt_key) {
-          fprintf(stderr, "Error: B2 mode requires -k <key>\n");
-          exit(1);
-      }
-      if(edge_init_twofish(&eee, (uint8_t*)(encrypt_key), strlen(encrypt_key)) < 0) {
-          fprintf(stderr, "Error: twofish setup failed.\n");
-          return(-1);
+          traceEvent(TRACE_WARNING, "No encryption key provided, falling back to no encryption");
+          encrypt_mode = 1;
+          eee.null_transop = 1;
+      } else {
+          if(edge_init_twofish(&eee, (uint8_t*)(encrypt_key), strlen(encrypt_key)) < 0) {
+              fprintf(stderr, "Error: twofish setup failed.\n");
+              return(-1);
+          }
       }
 		} else if (encrypt_mode == 3) {
 				// B3 - AES-CBC
